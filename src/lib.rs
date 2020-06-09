@@ -207,6 +207,7 @@ macro_rules! heap {
     };
 }
 
+/// Array created by libc `malloc()` and dropped by libc `free()`.
 pub struct HeapArray<T> {
     ptr: *mut T,
     size: usize,
@@ -222,10 +223,13 @@ where T: Send{}
 
 impl<T> HeapArray<T>
 {
+    /// Size of memory of this instance in bytes.
     pub fn len_bytes(&self) -> usize
     {
 	Self::element_size() * self.size
     }
+
+    /// Number of elements in this instance.
     pub fn len(&self) -> usize
     {
 	self.size
@@ -239,14 +243,8 @@ impl<T> HeapArray<T>
     {
 	std::mem::size_of::<T>() == 1
     }
-    pub unsafe fn from_raw_parts(ptr: *mut T, size: usize) -> Self
-    {
-	Self{
-	    ptr,
-	    size,
-	    drop_check: true,
-	}
-    }
+
+    /// Creates a new `HeapArray<T>` from zeroed memory.
     pub fn new(size: usize) -> Self
     {
 	Self {
@@ -255,6 +253,8 @@ impl<T> HeapArray<T>
 	    drop_check: true,
 	}
     }
+
+    /// Creates a new `HeapArray<T>` from uninitialised memory.
     pub fn new_uninit(size: usize) -> Self
     {
 	Self {
@@ -263,6 +263,24 @@ impl<T> HeapArray<T>
 	    drop_check: true,
 	}
     }
+
+    /// Consumes the instance, returning a new instance after calling `realloc()` on the underlying memory.
+    pub fn resize(self, size: usize) -> Self
+    {
+	unsafe {
+	    let ptr = alloc::realloc(self.ptr as VoidPointer, size).expect("realloc()") as *mut T;
+	    
+	    let output = Self {
+		ptr,
+		size,
+		drop_check: self.drop_check
+	    };
+	    std::mem::forget(self);
+	    output
+	}
+    }
+
+    /// Creates a new `HeapArray<T>` from an initial element and a size.
     pub fn new_repeat(initial: T, size: usize) -> Self
     where T: Copy
     {
@@ -282,6 +300,8 @@ impl<T> HeapArray<T>
 	}
 	this
     }
+
+    /// Creates a new `HeapArray<T>` from a range of elements and a size, repeating if needed.
     pub fn new_range<U>(initial: U, size: usize) -> Self
     where T: Copy,
 	  U: AsRef<[T]>
@@ -304,42 +324,64 @@ impl<T> HeapArray<T>
 	}
     }
 
+    /// As an immutable slice of `T`.
     pub fn as_slice(&self) -> &[T]
     {
 	unsafe{slice::from_raw_parts(self.ptr, self.size)}
     }
+
+    /// As a mutable slice of `T`.
     pub fn as_slice_mut(&mut self) -> &mut [T]
     {
 	unsafe{slice::from_raw_parts_mut(self.ptr, self.size)}
     }
+
+    /// As immutable raw pointer.
     pub fn as_ptr(&self) -> *const T
     {
 	self.ptr as *const T
     }
+
+    /// As mutable raw pointer.
     pub fn as_ptr_mut(&mut self) -> *mut T
     {
 	self.ptr
     }
+
+    /// An immutable slice of the memory.
     pub fn memory(&self) -> &[u8]
     {
 	unsafe {
 	    slice::from_raw_parts(self.ptr as *const u8, self.len_bytes())
 	}
     }
-    pub fn memory_mut(&mut self) -> &mut [u8]
+
+    /// A mutable slice of the memory.
+    pub unsafe fn memory_mut(&mut self) -> &mut [u8]
     {
-	unsafe {
-	    slice::from_raw_parts_mut(self.ptr as *mut u8, self.len_bytes())
-	}
+	slice::from_raw_parts_mut(self.ptr as *mut u8, self.len_bytes())
     }
 
-    pub fn into_raw(self) -> (*mut T, usize)
+
+    /// Consumes the instance. Returns a raw pointer and the number of elements.
+    pub fn into_raw_parts(self) -> (*mut T, usize)
     {
 	let op = (self.ptr, self.size);
 	std::mem::forget(self);
 	op
     }
 
+    /// Create a `HeapArray<T>` from a raw pointer and a number of elements.
+    pub unsafe fn from_raw_parts(ptr: *mut T, size: usize) -> Self
+    {
+	Self {
+	    ptr,
+	    size,
+	    drop_check: true,
+	}
+    }
+
+    /// Consumes the instance. Frees the memory without dropping the items.
     pub fn free(self)
     {
 	if self.ptr != ptr::null() {
@@ -350,6 +392,7 @@ impl<T> HeapArray<T>
 	std::mem::forget(self);
     }
 
+    /// Consumes the instance, moving all elements into a slice.
     pub fn into_slice(self, slice: &mut [T])
     {
 	let ptr = &mut slice[0] as *mut T;
@@ -360,6 +403,7 @@ impl<T> HeapArray<T>
 	self.free();
     }
 
+    /// Coerce of clone memory from a boxed slice.
     pub fn from_boxed_slice(bx: Box<[T]>) -> Self
     {
 	#[cfg(feature="assume_libc")]
@@ -376,6 +420,7 @@ impl<T> HeapArray<T>
 	}
     }
 
+    /// Coerce or clone memory into a boxed slice.
     #[allow(unused_mut)]
     pub fn into_boxed_slice(mut self) -> Box<[T]>
     {
@@ -394,6 +439,9 @@ impl<T> HeapArray<T>
 	}
     }
 
+    /// Reinterpret the memory of this instance into an insteance of a different type
+    /// # Panics
+    /// If `U` cannot fit into `T`.  
     pub unsafe fn reinterpret<U>(self) -> HeapArray<U>
     {
 	assert!(self.len_bytes() % std::mem::size_of::<U>() == 0);
@@ -406,15 +454,39 @@ impl<T> HeapArray<T>
 	output
     }
 
+    /// Reinterpret the memory of this instance into an immutable slice of a different type.
+    /// # Panics
+    /// If `U` cannot fit into `T`.  
+    pub fn reinterpret_ref<U>(&self) -> &[U]
+    {
+	assert!(self.len_bytes() % std::mem::size_of::<U>() == 0);
+	unsafe {
+	    slice::from_raw_parts(self.ptr as *const U, self.len_bytes() / std::mem::size_of::<U>())
+	}
+    }
+    /// Reinterpret the memory of this instance into a mutable slice of a different type.
+    /// # Panics
+    /// If `U` cannot fit into `T`.  
+    pub unsafe fn reinterpret_mut<U>(&mut self) -> &mut [U]
+    {
+	assert!(self.len_bytes() % std::mem::size_of::<U>() == 0);
+	slice::from_raw_parts_mut(self.ptr as *mut U, self.len_bytes() / std::mem::size_of::<U>())
+    }
+
+    /// Immutable slice iterator for this instance
     pub fn iter<'a>(&'a self) -> slice::Iter<'a, T>
     {
 	self.as_slice().iter()
     }
+
+    /// Mutable slice iterator for this instance
     pub fn iter_mut<'a>(&'a mut self) -> slice::IterMut<'a, T>
     {
 	self.as_slice_mut().iter_mut()
     }
 
+    /// Replace the element at `index` with `value`, and `forget` the old one.
+    /// Useful with `new_uninit()`.
     pub fn replace_and_forget(&mut self, index: usize, value: T)
     {
 	assert!(index<self.len());
@@ -423,20 +495,8 @@ impl<T> HeapArray<T>
 	}
     }
 
-    pub fn clone(&self) -> Self
-    where T: Clone
-    {
-	let mut output = Self::new_uninit(self.len());
-	output.drop_check = self.drop_check;
 
-	unsafe {
-	    for (i,x) in (0..self.len()).zip(self.iter())
-	    {   
-		ptr::put(output.as_ptr_mut().offset(i as isize), x.clone());
-	    }
-	}
-	output
-    }
+    /// Clone the memory to a new instance.
     pub unsafe fn clone_mem(&self) -> Self
     {
 	let mut output = Self::new_uninit(self.len());
@@ -444,6 +504,16 @@ impl<T> HeapArray<T>
 	ptr::memcpy(output.ptr as VoidPointer, self.ptr as VoidPointer, self.len_bytes());
 
 	output
+    }
+
+    /// Leak the memory to a static slice reference.
+    pub fn leak(mut self) -> &'static mut [T]
+    {
+	unsafe {
+	    let bx = Box::from_raw(self.as_slice_mut() as *mut [T]);
+	    std::mem::forget(self);
+	    Box::leak(bx)
+	}
     }
 }
 
@@ -577,3 +647,70 @@ impl<T> From<HeapArray<T>> for Box<[T]>
 
 mod iter;
 pub use iter::*;
+
+impl<T> std::cmp::Eq for HeapArray<T>
+where T: std::cmp::Eq {}
+impl<T, U> std::cmp::PartialEq<U> for HeapArray<T>
+where T: std::cmp::PartialEq,
+      U: AsRef<[T]>
+{
+    fn eq(&self, other: &U) -> bool
+    {
+	let other = other.as_ref();
+	self.len() == other.len() &&
+	{
+	    for (x, y) in self.iter().zip(0..other.len()) {
+		if x != &other[y] {return false;}
+	    }
+	    true
+	}
+    }
+}
+
+impl<T> std::hash::Hash for HeapArray<T>
+where T: std::hash::Hash
+{
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H)
+    {
+	self.size.hash(state);
+	self.as_slice().hash(state);
+    }
+}
+
+impl<T> Clone for HeapArray<T>
+where T: Clone
+{
+    fn clone(&self) -> Self
+    where T: Clone
+    {
+	let mut output = Self::new_uninit(self.len());
+	output.drop_check = self.drop_check;
+
+	unsafe {
+	    for (i,x) in (0..self.len()).zip(self.iter())
+	    {   
+		ptr::put(output.as_ptr_mut().offset(i as isize), x.clone());
+	    }
+	}
+	output
+    }
+}
+
+use std::fmt;
+impl<T> fmt::Debug for HeapArray<T>
+where T: fmt::Debug
+{
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result
+    {
+	write!(f, "{}: (", std::any::type_name::<Self>())?;
+	let len = self.len();
+	for (x,i) in self.iter().zip(0..len)
+	{
+	    write!(f, "{:?}", x)?;
+	    if i < len-1 {
+		write!(f, " ")?;
+	    }
+	}
+	write!(f, ")")
+    }
+}
