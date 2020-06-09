@@ -186,7 +186,7 @@ macro_rules! heap {
 	    let mut ha = $crate::HeapArray::new_uninit(num);
 	    
 	    for x in 0..num {
-		ha[x] = $value;
+		ha.replace_and_forget(x, $value);
 	    }
 	    
 	    ha
@@ -199,7 +199,7 @@ macro_rules! heap {
 		let fp = 0;
 		$(
 		    let fp = fp + 1; 
-		    ha[fp-1] = $n;
+		    ha.replace_and_forget(fp-1, $n);
 		)*
 	    }
 	    ha
@@ -403,6 +403,46 @@ impl<T> HeapArray<T>
 	    drop_check: self.drop_check,
 	};
 	std::mem::forget(self);
+	output
+    }
+
+    pub fn iter<'a>(&'a self) -> slice::Iter<'a, T>
+    {
+	self.as_slice().iter()
+    }
+    pub fn iter_mut<'a>(&'a mut self) -> slice::IterMut<'a, T>
+    {
+	self.as_slice_mut().iter_mut()
+    }
+
+    pub fn replace_and_forget(&mut self, index: usize, value: T)
+    {
+	assert!(index<self.len());
+	unsafe {
+	    ptr::put(self.as_ptr_mut().offset(index as isize), value);
+	}
+    }
+
+    pub fn clone(&self) -> Self
+    where T: Clone
+    {
+	let mut output = Self::new_uninit(self.len());
+	output.drop_check = self.drop_check;
+
+	unsafe {
+	    for (i,x) in (0..self.len()).zip(self.iter())
+	    {   
+		ptr::put(output.as_ptr_mut().offset(i as isize), x.clone());
+	    }
+	}
+	output
+    }
+    pub unsafe fn clone_mem(&self) -> Self
+    {
+	let mut output = Self::new_uninit(self.len());
+	output.drop_check = self.drop_check;
+	ptr::memcpy(output.ptr as VoidPointer, self.ptr as VoidPointer, self.len_bytes());
+
 	output
     }
 }
