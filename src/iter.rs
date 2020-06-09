@@ -2,8 +2,6 @@ use super::*;
 
 use std::{
     mem::{
-	replace,
-	MaybeUninit,
 	forget,
     },
 };
@@ -14,19 +12,21 @@ use ptr::{
 pub struct IntoIter<T>
 {
     start: *mut T,
-    current: *mut T,
+    current_offset: usize,
     sz: usize,
 }
 
 impl<T> IntoIter<T>
 {
-    fn current_offset(&self) -> usize
+    fn current(&mut self) -> *mut T
     {
-	(self.current as usize) - (self.start as usize)
+	unsafe {
+	    self.start.offset(self.current_offset as isize)
+	}
     }
     fn free_if_needed(&mut self)
     {
-	if self.start != ptr::null() && self.current_offset() >= self.sz {
+	if self.start != ptr::null() && self.current_offset >= self.sz {
 	    unsafe {
 		alloc::free(self.start as VoidPointer);
 	    }
@@ -40,12 +40,13 @@ impl<T> Iterator for IntoIter<T>
     type Item = T;
     fn next(&mut self) -> Option<Self::Item>
     {
-	let output = if self.current_offset() >= self.sz {
+	let output = if self.current_offset >= self.sz || self.sz == 0 {
 	    None
 	} else {
 	    unsafe {
-		let output = replace(&mut (*self.current), MaybeUninit::zeroed().assume_init());
-		self.current = self.current.offset(1);
+		let output = crate::ptr::take(self.current());//replace(&mut (*self.current), MaybeUninit::zeroed().assume_init());
+		self.current_offset+=1;
+
 		Some(output)
 	    }
 	};
@@ -71,7 +72,7 @@ impl<T> IntoIterator for HeapArray<T>
     {
 	let output = Self::IntoIter {
 	    start: self.ptr,
-	    current: self.ptr,
+	    current_offset: 0,
 	    sz: self.len(),
 	};
 	forget(self);

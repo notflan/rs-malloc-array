@@ -23,6 +23,8 @@ mod tests {
 	assert_eq!(heap.as_slice(), ["test one", "test two"]);
     }
 
+    struct Unit;
+    
     #[test]
     fn zero_size() {
 	let heap: HeapArray<u8> = heap![];
@@ -30,6 +32,14 @@ mod tests {
 
 	assert_eq!(&heap.as_slice(), &[]);
 	assert_eq!(&heap_zst.as_slice(), &[(),(),()]);
+
+	let heap = heap![Unit; 32];
+	let mut i=0;
+	for _x in heap.into_iter()
+	{
+	    i+=1;
+	}
+	assert_eq!(i, 32);
     }
 
     #[test]
@@ -43,16 +53,16 @@ mod tests {
 	    assert_eq!(x % 2, 1);
 	}
 
-	let non = heap!["string one".to_owned(), "string two".to_owned()];
+	let non = heap!["string one".to_owned(), "string two!".to_owned(), "string".to_owned()];
 
 	let iter = non.into_iter();
-	assert_eq!(iter.len(), 2);
+	assert_eq!(iter.len(), 3);
 	for x in iter
 	{
-	    assert_eq!(&x[..6], "string");
+	    assert_eq!(&x[..6], "string");	    
 	}
     }
-
+    
     #[test]
     fn vec()
     {
@@ -318,6 +328,26 @@ impl<T> HeapArray<T>
 	op
     }
 
+    pub fn free(self)
+    {
+	if self.ptr != ptr::null() {
+	    unsafe {
+		alloc::free(self.ptr as VoidPointer);
+	    }
+	}
+	std::mem::forget(self);
+    }
+
+    pub fn into_slice(self, slice: &mut [T])
+    {
+	let ptr = &mut slice[0] as *mut T;
+	assert!(slice.len() >= self.len());
+	unsafe{
+	    ptr::memmove(ptr as ptr::VoidPointer, self.ptr as ptr::VoidPointer, self.len_bytes());
+	}
+	self.free();
+    }
+
     pub fn from_boxed_slice(bx: Box<[T]>) -> Self
     {
 	#[cfg(feature="assume_libc")]
@@ -326,7 +356,7 @@ impl<T> HeapArray<T>
 	    Self::from_raw_parts(Box::<[T]>::into_raw(bx) as *mut T, len)
 	}
 	#[cfg(not(feature="assume_libc"))]
-	{ //TODO: wtf?
+	{
 	    let len = bx.len();
 	    let out = Self::from(Vec::from(bx));
 	    assert_eq!(len, out.len());
@@ -445,10 +475,11 @@ impl<T> From<HeapArray<T>> for Vec<T>
     fn from(ha: HeapArray<T>) -> Self
     {
 	let mut output = Vec::with_capacity(ha.len());
-	for item in ha.into_iter()
-	{
-	    output.push(item);
+	unsafe {
+	    ptr::memmove(output.as_mut_ptr() as ptr::VoidPointer, ha.ptr as ptr::VoidPointer, ha.len_bytes());
+	    output.set_len(ha.len());
 	}
+	ha.free();
 	output
     }
 }

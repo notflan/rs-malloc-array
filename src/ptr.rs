@@ -33,3 +33,12 @@ pub unsafe fn take<T>(ptr: *mut T) -> T
 {
     mem::replace(&mut *ptr, MaybeUninit::zeroed().assume_init())
 }
+
+pub unsafe fn memcpy(dst: VoidPointer, src: ConstVoidPointer, size: usize) -> VoidPointer
+{
+    libc::memcpy(dst as *mut c_void, src as *const c_void, size as size_t) as VoidPointer
+}
+pub unsafe fn memmove(dst: VoidPointer, src: ConstVoidPointer, size: usize) -> VoidPointer
+{
+    libc::memmove(dst as *mut c_void, src as *const c_void, size as size_t) as VoidPointer
+}
