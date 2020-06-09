@@ -4,7 +4,7 @@ description = "libc heap array allocator"
 version = "1.0.0"
 authors = ["Avril <flanchan@cumallover.me>"]
 edition = "2018"
-license = "GPL v3"
+license = "GPL-3.0-or-later"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
