@@ -1,0 +1,25 @@
+[package]
+name = "malloc-array"
+description = "libc heap array allocator"
+version = "0.1.0"
+authors = ["Avril <flanchan@cumallover.me>"]
+edition = "2018"
+license = "GPL v3"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[features]
+default = ["zst_noalloc"]
+
+# Assume Rust will free things allocated with malloc() properly.
+assume_libc = []
+
+# Do not allocate for ZSTs
+zst_noalloc = []
+
+# Use jemalloc instead of libc malloc
+jemalloc = ["jemalloc-sys"]
+
+[dependencies]
+libc = "0.2"
+jemalloc-sys = { version = "0.3", optional = true }
