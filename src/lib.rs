@@ -24,6 +24,18 @@ mod tests {
     }
 
     struct Unit;
+
+    #[test]
+    fn reinterpret()
+    {
+	let heap = heap![u8; 32];
+	unsafe {
+	    let heap = heap.reinterpret::<i32>();
+	    assert_eq!(heap.len(), 8);
+	    let heap = heap.reinterpret::<u8>();
+	    assert_eq!(heap.len(), 32);
+	}
+    }
     
     #[test]
     fn zero_size() {
