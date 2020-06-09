@@ -381,6 +381,18 @@ impl<T> HeapArray<T>
 	    vec.into_boxed_slice()
 	}
     }
+
+    pub unsafe fn reinterpret<U>(self) -> HeapArray<U>
+    {
+	assert!(self.len_bytes() % std::mem::size_of::<U>() == 0);
+	let output = HeapArray {
+	    size: self.len_bytes() / std::mem::size_of::<U>(),
+	    ptr: self.ptr as *mut U,
+	    drop_check: self.drop_check,
+	};
+	std::mem::forget(self);
+	output
+    }
 }
 
 impl<T, I> Index<I> for HeapArray<T>
@@ -493,6 +505,21 @@ impl<T> From<Vec<T>> for HeapArray<T>
 	    output[i] = x;
 	}
 	output
+    }
+}
+
+impl<T> From<Box<[T]>> for HeapArray<T>
+{
+    fn from(sl: Box<[T]>) -> Self
+    {
+	Self::from_boxed_slice(sl)
+    }
+}
+impl<T> From<HeapArray<T>> for Box<[T]>
+{
+    fn from(ha: HeapArray<T>) -> Self
+    {
+	ha.into_boxed_slice()
     }
 }
 
