@@ -54,6 +54,14 @@ impl<T> Iterator for IntoIter<T>
     }
 }
 
+impl<T> ExactSizeIterator for IntoIter<T>
+{
+    fn len(&self) -> usize
+    {
+	self.sz
+    }
+}
+
 impl<T> IntoIterator for HeapArray<T>
 {
     type Item = T;

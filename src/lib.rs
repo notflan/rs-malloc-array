@@ -36,17 +36,53 @@ mod tests {
     fn into_iter() {
 	let primitive = heap![1,3,5,7,9u32];
 
-	for x in primitive.into_iter()
+	let iter = primitive.into_iter();
+	assert_eq!(iter.len(), 5);
+	for x in iter
 	{
 	    assert_eq!(x % 2, 1);
 	}
 
 	let non = heap!["string one".to_owned(), "string two".to_owned()];
 
-	for x in non.into_iter()
+	let iter = non.into_iter();
+	assert_eq!(iter.len(), 2);
+	for x in iter
 	{
 	    assert_eq!(&x[..6], "string");
 	}
+    }
+
+    #[test]
+    fn vec()
+    {
+	let heap = heap![0,1,2,3,4u8];
+	let vec = vec![0,1,2,3,4u8];
+
+	assert_eq!(&vec[..], &heap[..]);
+
+	let heap = Vec::from(heap);
+
+	assert_eq!(vec,heap);
+
+	let heap = HeapArray::from(heap);
+
+	assert_eq!(&vec[..], &heap[..]);
+    }
+    
+    #[test]
+    fn boxed_slices() {
+	let array = [0,1,2,3,4];
+	let vector = vec![0,1,2,3,4];
+	assert_eq!(&vector[..], &array[..]);
+	let slice = vector.into_boxed_slice();
+	assert_eq!(&slice[..], &array[..]);
+	let heap = HeapArray::from_boxed_slice(slice);
+	assert_eq!(&heap[..], &array[..]);
+	let slice = heap.into_boxed_slice();
+	assert_eq!(&slice[..], &array[..]);
+	let vector = Vec::from(slice);
+	assert_eq!(&vector[..], &array[..]);
     }
 }
 
@@ -66,6 +102,10 @@ use std::{
     slice::{
 	self,
 	SliceIndex,
+    },
+    marker::{
+	Send,
+	Sync,
     },
 };
 use crate::{
@@ -153,6 +193,11 @@ pub struct HeapArray<T> {
     pub drop_check: bool,
 }
 
+unsafe impl<T> Sync for HeapArray<T>
+where T: Sync{}
+unsafe impl<T> Send for HeapArray<T>
+where T: Send{}
+
 impl<T> HeapArray<T>
 {
     pub fn len_bytes(&self) -> usize
@@ -171,6 +216,14 @@ impl<T> HeapArray<T>
     const fn is_single() -> bool
     {
 	std::mem::size_of::<T>() == 1
+    }
+    pub unsafe fn from_raw_parts(ptr: *mut T, size: usize) -> Self
+    {
+	Self{
+	    ptr,
+	    size,
+	    drop_check: true,
+	}
     }
     pub fn new(size: usize) -> Self
     {
@@ -258,6 +311,29 @@ impl<T> HeapArray<T>
 	}
     }
 
+    pub fn into_raw(self) -> (*mut T, usize)
+    {
+	let op = (self.ptr, self.size);
+	std::mem::forget(self);
+	op
+    }
+
+    pub fn from_boxed_slice(bx: Box<[T]>) -> Self
+    {
+	#[cfg(feature="assume_libc")]
+	unsafe {
+	    let len = bx.len();
+	    Self::from_raw_parts(Box::<[T]>::into_raw(bx) as *mut T, len)
+	}
+	#[cfg(not(feature="assume_libc"))]
+	{ //TODO: wtf?
+	    let len = bx.len();
+	    let out = Self::from(Vec::from(bx));
+	    assert_eq!(len, out.len());
+	    out
+	}
+    }
+
     #[allow(unused_mut)]
     pub fn into_boxed_slice(mut self) -> Box<[T]>
     {
@@ -269,8 +345,10 @@ impl<T> HeapArray<T>
 	}
 	#[cfg(not(feature="assume_libc"))]
 	{
+	    let len = self.len();
 	    let vec = Vec::from(self);
-	    return vec.into_boxed_slice();
+	    assert_eq!(vec.len(), len);
+	    vec.into_boxed_slice()
 	}
     }
 }
@@ -360,6 +438,8 @@ impl<T> BorrowMut<[T]> for HeapArray<T>
     }
 }
 
+// `From`s
+
 impl<T> From<HeapArray<T>> for Vec<T>
 {
     fn from(ha: HeapArray<T>) -> Self
@@ -368,6 +448,18 @@ impl<T> From<HeapArray<T>> for Vec<T>
 	for item in ha.into_iter()
 	{
 	    output.push(item);
+	}
+	output
+    }
+}
+impl<T> From<Vec<T>> for HeapArray<T>
+{
+    fn from(vec: Vec<T>) -> Self
+    {
+	let mut output = HeapArray::new_uninit(vec.len());
+	for (i,x) in (0..vec.len()).zip(vec.into_iter())
+	{
+	    output[i] = x;
 	}
 	output
     }
