@@ -187,7 +187,7 @@ use crate::{
 #[macro_export]
 /// `vec![]`-like macro for creating `HeapArray<T>` instances.
 ///
-/// Provices methods for creating safly accessable arrays using `malloc()` with a `Vec<T>` like interface.
+/// Provides methods for creating safely accessable arrays using `malloc()` with a `Vec<T>` like interface.
 /// Also provides methods of optimising deallocations.
 ///
 /// # Usage
