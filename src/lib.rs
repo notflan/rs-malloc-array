@@ -19,7 +19,9 @@ mod tests {
     #[test]
     fn non_trivial_type() {
 	let heap = heap!["test one".to_owned(), "test two".to_owned()];
-
+	let refs = heap![unsafe "test three"; 2];
+	
+	assert_eq!(&refs[..], &["test three", "test three"]);
 	assert_eq!(heap.as_slice(), ["test one", "test two"]);
     }
 
@@ -28,7 +30,7 @@ mod tests {
     #[test]
     fn reinterpret()
     {
-	let heap = heap![u8; 32];
+	let heap = heap![0u8; 32];
 	unsafe {
 	    let heap = heap.reinterpret::<i32>();
 	    assert_eq!(heap.len(), 8);
@@ -184,9 +186,17 @@ macro_rules! heap {
 	{
 	    let num = $number;
 	    let mut ha = $crate::HeapArray::new_uninit(num);
-	    
-	    for x in 0..num {
-		ha.replace_and_forget(x, $value);
+
+	    if ha.len() == ha.len_bytes() && ha.len() > 0 {
+		unsafe {
+		    let mut vl = $value;
+		    
+		    ha.set_memory(*std::mem::transmute::<_, &mut u8>(&mut vl));
+		}
+	    } else {
+		for x in 0..num {
+		    ha.replace_and_forget(x, $value);
+		}
 	    }
 	    
 	    ha
@@ -242,6 +252,12 @@ impl<T> HeapArray<T>
     const fn is_single() -> bool
     {
 	std::mem::size_of::<T>() == 1
+    }
+
+    /// Set each byte to a value.
+    pub unsafe fn set_memory(&mut self, value: u8)
+    {
+	ptr::memset(self.ptr as *mut u8, value, self.len_bytes());
     }
 
     /// Creates a new `HeapArray<T>` from zeroed memory.
