@@ -4,6 +4,9 @@ use std::{
     mem::{
 	forget,
     },
+    marker::{
+	Send,Sync,
+    },
 };
 use ptr::{
     VoidPointer,
@@ -15,6 +18,9 @@ pub struct IntoIter<T>
     current_offset: usize,
     sz: usize,
 }
+
+unsafe impl<T: Send> Send for IntoIter<T>{}
+unsafe impl<T: Sync> Sync for IntoIter<T>{}
 
 impl<T> IntoIter<T>
 {

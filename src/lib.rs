@@ -108,11 +108,27 @@ mod tests {
 	let vector = Vec::from(slice);
 	assert_eq!(&vector[..], &array[..]);
     }
+
+    #[test]
+    fn init()
+    {
+	let mut array = heap![String; 32];
+	for mut string in array.initialise()
+	{
+	    string.put("Hiya".to_owned());
+	}
+
+	for x in array.into_iter()
+	{
+	    assert_eq!(x, "Hiya");
+	}
+    }
 }
 
 mod ptr;
 mod alloc;
 mod reinterpret;
+pub mod init;
 
 use std::{
     ops::{
@@ -252,6 +268,12 @@ impl<T> HeapArray<T>
     const fn is_single() -> bool
     {
 	std::mem::size_of::<T>() == 1
+    }
+
+    
+    pub fn initialise<'a>(&'a mut self) -> init::InitIter<'a, T>
+    {
+	init::InitIter::new(self, 0)
     }
 
     /// Set each byte to a value.
