@@ -25,6 +25,39 @@ drop(array); // This is now safe.
 ```
 
  [replace_and_forget]: https://docs.rs/malloc-array/1.0.0/malloc_array/struct.HeapArray.html#method.replace_and_forget
+ 
+#### Alternatively initialising with iterator
+The library also provides the `InitIter` type, which is a mutable iterator for `HeapArray<T>` that allows you to safely initialise porentially uninitialised elements.
+
+``` rust
+let mut array = heap![String; 10];
+for mut init in array.initialise()
+{
+	init.set(format!("string!"));
+	// Also see docs for `init::Init` type.
+}
+drop(array); // This is now safe.
+```
+##### Filling the iterator
+The iterator also provides methods to fill itself of uninitialised values.
+
+###### Fill with `Clone`
+``` rust
+array.initialise().fill("value".to_owned());
+```
+###### Fill with lambda
+``` rust
+array.initialise().fill_with(|| "value".to_owned());
+```
+###### Fill with `Default`
+``` rust
+array.initialise().fill_default();
+```
+###### Uninitialise the memory
+Since it is unknown if the type `T` supports zero-initialisation, zeroing the memory is counted as making it uninitialised.
+``` rust
+array.initialise().uninit(); //Sets all the rest of the iterator bytes to 0.
+```
 
 ### Creating initialised arrays.
 These are created with `malloc()` and set with `replace_and_forget` (or, for the special case of `u8` sized types, `memset`).
@@ -44,7 +77,7 @@ These are created with either `malloc(0)`, or if the `zst_noalloc` feature is en
 heap![];
 ```
 `zst_noalloc` is enabled by default and causes instances with `len_bytes() == 0` to have `NULL` internal pointers instead of dangling ones returned by `malloc(0)`.
-This behaviour my not be desireable and if it is not, disable the default featues.
+This behaviour may not be desireable and if it is not, disable the default featues.
 
 ### Dropping on free
 Arrays created this way are dropped in a way that ensures each element is also dropped. For anything implementing the `Copy` trait, this is redundant.

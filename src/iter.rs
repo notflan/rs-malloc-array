@@ -7,11 +7,15 @@ use std::{
     marker::{
 	Send,Sync,
     },
+    ops::{
+	Drop,
+    },
 };
 use ptr::{
     VoidPointer,
 };
 
+/// An iterator that consumes `HeapArray<T>` instance and ensures all memory is appropriately freed when consumed or dropped.
 pub struct IntoIter<T>
 {
     start: *mut T,
@@ -20,7 +24,7 @@ pub struct IntoIter<T>
 }
 
 unsafe impl<T: Send> Send for IntoIter<T>{}
-unsafe impl<T: Sync> Sync for IntoIter<T>{}
+unsafe impl<T: Sync> Sync for IntoIter<T>{} //this is probably fine right?
 
 impl<T> IntoIter<T>
 {
@@ -38,6 +42,31 @@ impl<T> IntoIter<T>
 	    }
 	    self.start = ptr::null();
 	}
+    }
+    fn drain_if_needed(&mut self)
+    {
+	if self.start != ptr::null() {
+
+	    unsafe {
+		if self.current_offset<self.sz {
+		    for i in self.current_offset..self.sz
+		    {
+			drop(ptr::take(self.start.offset(i as isize)));
+		    }
+		}
+
+		alloc::free(self.start as VoidPointer);
+	    }
+	    self.start = ptr::null();
+	}
+    }
+}
+
+impl<T> Drop for IntoIter<T>
+{
+    fn drop(&mut self)
+    {
+	self.drain_if_needed();
     }
 }
 

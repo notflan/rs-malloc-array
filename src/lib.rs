@@ -75,6 +75,10 @@ mod tests {
 	{
 	    assert_eq!(&x[..6], "string");	    
 	}
+
+	let non = heap!["strings".to_owned(), "strings!!!".to_owned()];
+	let iter = non.into_iter();
+	drop(iter);
     }
     
     #[test]
@@ -117,10 +121,35 @@ mod tests {
 	{
 	    string.put("Hiya".to_owned());
 	}
-
+	assert_eq!(array.len(), 32);
 	for x in array.into_iter()
 	{
 	    assert_eq!(x, "Hiya");
+	}
+
+	let mut array = heap![String; 10];
+	array.initialise().fill("wowe".to_owned());
+	for x in array.into_iter()
+	{
+	    assert_eq!(x, "wowe");
+	}
+
+	
+
+	let mut array = heap![String; 10];
+	array.initialise().fill_with(|| "wow".to_owned());
+	for x in array.into_iter()
+	{
+	    assert_eq!(x, "wow");
+	}
+
+	
+
+	let mut array = heap![String; 10];
+	array.initialise().fill_default();
+	for x in array.into_iter()
+	{
+	    assert_eq!(x, "");
 	}
     }
 }
@@ -129,6 +158,7 @@ mod ptr;
 mod alloc;
 mod reinterpret;
 pub mod init;
+pub use init::InitIterExt;
 
 use std::{
     ops::{
@@ -270,7 +300,7 @@ impl<T> HeapArray<T>
 	std::mem::size_of::<T>() == 1
     }
 
-    
+    /// Create an iterator for safely setting potentially uninitialised values within the instance.
     pub fn initialise<'a>(&'a mut self) -> init::InitIter<'a, T>
     {
 	init::InitIter::new(self, 0)
@@ -441,7 +471,7 @@ impl<T> HeapArray<T>
 	self.free();
     }
 
-    /// Coerce of clone memory from a boxed slice.
+    /// Coerce or clone memory from a boxed slice.
     pub fn from_boxed_slice(bx: Box<[T]>) -> Self
     {
 	#[cfg(feature="assume_libc")]
