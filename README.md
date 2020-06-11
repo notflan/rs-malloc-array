@@ -11,7 +11,7 @@ See [documentation] for more details.
 ### Creating zero-initialised arrays.
 These are created with `calloc()`.
 ``` rust
-heap![Type, size];
+heap![Type; size];
 ```
 Note that if `Type` does not support zero-initialisation it is undefined behaviour to drop or access any element of the returned array. To assign without dropping see the associated function [replace_and_forget]:
 
