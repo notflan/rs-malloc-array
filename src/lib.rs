@@ -8,6 +8,26 @@ extern crate jemalloc_sys;
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn copy() {
+	let heap = heap![unsafe 1u16; 10];
+	let mut heap2 = heap![unsafe 10u16; 20];
+
+	unsafe {
+	    assert_eq!(heap2.memory_from_raw(heap.as_ptr(), heap.len()), 10);
+	}
+
+	assert_eq!(heap2[0], 1);
+	assert_eq!(heap2[10], 10);
+
+	unsafe {
+	    let heap3 = HeapArray::from_raw_copied(heap2.as_ptr(), 15);
+	    assert_eq!(heap3.len(), 15);
+	    assert_eq!(heap3[0], 1);
+	    assert_eq!(heap3[10], 10);
+	}
+    }
     
     #[test]
     fn as_slice() {
@@ -582,6 +602,22 @@ impl<T> HeapArray<T>
 	    std::mem::forget(self);
 	    Box::leak(bx)
 	}
+    }
+
+    /// Copy memory in from a raw pointer.
+    pub unsafe fn memory_from_raw(&mut self, from: *const T, size: usize) -> usize
+    {
+	let size = std::cmp::min(size, self.len());
+	ptr::memcpy(self.ptr as VoidPointer, from as VoidPointer, size * std::mem::size_of::<T>());
+	size
+    }
+
+    /// Create a new instance with memory copied from a raw pointer.
+    pub unsafe fn from_raw_copied(from: *const T, size: usize) -> Self
+    {
+	let mut inp = Self::new_uninit(size);
+	inp.memory_from_raw(from, size);
+	inp
     }
 }
 
