@@ -33,7 +33,7 @@ The library also provides the `InitIter` type, which is a mutable iterator for `
 let mut array = heap![String; 10];
 for mut init in array.initialise()
 {
-	init.set(format!("string!"));
+	init.put(format!("string!"));
 	// Also see docs for `init::Init` type.
 }
 drop(array); // This is now safe.
