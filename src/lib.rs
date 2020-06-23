@@ -10,6 +10,17 @@ mod tests {
     use super::*;
 
     #[test]
+    fn from_bytes()
+    {
+	unsafe {
+	    let heap = HeapArray::<i32>::from_bytes(&[0xff,0xff,0xff,0xff,0,0,0,0,0xff,0xff,0xff,0xff]);
+	    assert_eq!(heap[0], -1);
+	    assert_eq!(heap[1], 0);
+	    assert_eq!(heap[2], -1);
+	}
+    }
+    
+    #[test]
     fn copy() {
 	let heap = heap![unsafe 1u16; 10];
 	let mut heap2 = heap![unsafe 10u16; 20];
@@ -179,6 +190,7 @@ mod alloc;
 mod reinterpret;
 pub mod init;
 pub use init::InitIterExt;
+pub mod store;
 
 use std::{
     ops::{
@@ -201,6 +213,7 @@ use std::{
 use crate::{
     ptr::{
 	VoidPointer,
+	ConstVoidPointer,
     },
 };
 
@@ -604,11 +617,37 @@ impl<T> HeapArray<T>
 	}
     }
 
+    /// Copy memory in from a slice of bytes.
+    pub unsafe fn memory_from_bytes<U: AsRef<[u8]>>(&mut self, from: U) -> usize
+    {
+	let from = from.as_ref();
+	let size = std::cmp::min(from.len(), self.len_bytes());
+	ptr::memcpy(self.ptr as VoidPointer, &from[0] as *const u8 as ConstVoidPointer, size);
+	size
+    }
+
+    /// Copy memory in from a pointer to bytes.
+    pub unsafe fn memory_from_raw_bytes(&mut self, from: *const u8, size: usize) -> usize
+    {
+	let size = std::cmp::min(size, self.len_bytes());
+	ptr::memcpy(self.ptr as VoidPointer, from as *const u8 as ConstVoidPointer, size);
+	size
+    }
+
+    /// Copy memory in from a raw pointer.
+    pub unsafe fn memory_from_slice<U: AsRef<[T]>>(&mut self, from: U) -> usize
+    {
+	let from = from.as_ref();
+	let size = std::cmp::min(from.len(), self.len());
+	ptr::memcpy(self.ptr as VoidPointer, &from[0] as *const T as ConstVoidPointer, size * std::mem::size_of::<T>());
+	size
+    }
+    
     /// Copy memory in from a raw pointer.
     pub unsafe fn memory_from_raw(&mut self, from: *const T, size: usize) -> usize
     {
 	let size = std::cmp::min(size, self.len());
-	ptr::memcpy(self.ptr as VoidPointer, from as VoidPointer, size * std::mem::size_of::<T>());
+	ptr::memcpy(self.ptr as VoidPointer, from as *const T as ConstVoidPointer, size * std::mem::size_of::<T>());
 	size
     }
 
@@ -618,6 +657,31 @@ impl<T> HeapArray<T>
 	let mut inp = Self::new_uninit(size);
 	inp.memory_from_raw(from, size);
 	inp
+    }
+    
+    /// Create a new instance with memory copied from a slice.
+    pub unsafe fn from_slice_copied<U: AsRef<[T]>>(from: U) -> Self
+    where T: Copy
+    {
+	let from = from.as_ref();
+	Self::from_raw_copied(&from[0] as *const T, from.len())
+    }
+
+    /// Create a new instance with memory bytes copied from a raw pointer.
+    pub unsafe fn from_raw_bytes(from: *const u8, size: usize) -> Self
+    {
+	assert_eq!(size % Self::element_size(),0,"Cannot fit T into this size.");
+	
+	let mut inp = Self::new_uninit(size / Self::element_size());
+	inp.memory_from_raw_bytes(from, size);
+	inp
+    }
+    
+    /// Create a new instance with memory bytes copied from a slice.
+    pub unsafe fn from_bytes<U: AsRef<[u8]>>(from: U) -> Self
+    {
+	let from = from.as_ref();
+	Self::from_raw_bytes(&from[0], from.len())
     }
 }
 
